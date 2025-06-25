@@ -12,26 +12,28 @@ import { RobotStatus } from "@/components/RobotStatus"
 import { ChatSystem } from "@/components/ChatSystem"
 import { StakingLeaderboard } from "@/components/StakingLeaderboard"
 import { RobotLocationMap } from "@/components/RobotLocationMap"
-import { ConnectButton } from "@rainbow-me/rainbowkit"
+import { Button } from "@/components/ui/button"
 import { useBlockchainUtils } from "@/lib/blockchainUtils"
 import { Navbar } from "@/components/Navbar"
 import { ControlPanelStatusOverlay } from "@/components/ControlPanelStatusOverlay"
 
 const AppPage = () => {
-  const { isConnected, address } = useAccount()
+  // Use Arena SDK wallet state and utils
+  const arenaUtils = useBlockchainUtils()
+  const { isConnected, address, connectWallet } = arenaUtils
+  const { isConnected: wagmiIsConnected, address: wagmiAddress } = useAccount()
   const [searchParams, setSearchParams] = useSearchParams()
   const [selectedRobot, setSelectedRobot] = useState(searchParams.get("robot") || "robot-1")
-  const blockchainUtils = useBlockchainUtils()
   // Dynamic bot fee (AVAX per min)
   const [botFee, setBotFee] = useState<string>("0.0")
 
   // Fetch bot fee on mount
   useEffect(() => {
     ;(async () => {
-      const fee = await blockchainUtils.getBotFee()
+      const fee = await arenaUtils.getBotFee()
       setBotFee(fee)
     })()
-  }, [blockchainUtils])
+  }, [arenaUtils])
 
   // UTC countdown to next minute
   const [secondsToNextMinute, setSecondsToNextMinute] = useState(60 - new Date().getUTCSeconds())
@@ -58,13 +60,13 @@ const AppPage = () => {
   useEffect(() => {
     if (isConnected && address) {
       ;(async () => {
-        const ctrl = await blockchainUtils.getCurrentController()
+        const ctrl = await arenaUtils.getCurrentController()
         setCurrentIsController(ctrl.toLowerCase() === address.toLowerCase())
       })()
     } else {
       setCurrentIsController(false)
     }
-  }, [address, isConnected, blockchainUtils])
+  }, [address, isConnected, arenaUtils])
 
   const controllerRef = useRef(false);
   const lastControllerUpdateRef = useRef<number | null>(null);
@@ -73,7 +75,7 @@ const AppPage = () => {
   useEffect(() => {
     if (isConnected && address) {
       (async () => {
-        const ctrl = await blockchainUtils.getCurrentController();
+        const ctrl = await arenaUtils.getCurrentController();
         const isCtrl = ctrl.toLowerCase() === address.toLowerCase();
         controllerRef.current = isCtrl;
         setCurrentIsController(isCtrl);
@@ -86,7 +88,7 @@ const AppPage = () => {
       lastControllerUpdateRef.current = null;
       console.log('[INIT] Not connected or no address');
     }
-  }, [address, isConnected]);
+  }, [address, isConnected, arenaUtils])
 
   useEffect(() => {
     const tick = async () => {
@@ -103,17 +105,17 @@ const AppPage = () => {
         // Only update actual controller on minute rollover (and only once per minute)
         const nowMinute = Math.floor(Date.now() / 60000);
         if (lastControllerUpdateRef.current !== nowMinute && secs === 60) {
-          const ctrl = await blockchainUtils.getCurrentController();
+          const ctrl = await arenaUtils.getCurrentController();
           const isCtrl = ctrl.toLowerCase() === address.toLowerCase();
           controllerRef.current = isCtrl;
           setCurrentIsController(isCtrl);
           lastControllerUpdateRef.current = nowMinute;
-          const fee = await blockchainUtils.getBotFee();
+          const fee = await arenaUtils.getBotFee();
           setBotFee(fee);
           console.log('[ROLLOVER]', { now, ctrl, isCtrl, address, nowMinute });
         }
         // Always get next top staker for prediction
-        const top = await blockchainUtils.getHighestStaker();
+        const top = await arenaUtils.getHighestStaker();
         const nextIs = top.toLowerCase() === address.toLowerCase();
 
         // UI state logic (controllerRef.current = controller for this minute)
@@ -149,7 +151,7 @@ const AppPage = () => {
     const id = setInterval(tick, 1000);
     tick();
     return () => clearInterval(id);
-  }, [isConnected, address, blockchainUtils])
+  }, [isConnected, address, arenaUtils])
 
   useEffect(() => {
     // Update URL when robot changes
@@ -208,13 +210,22 @@ const AppPage = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Helper to shorten address
+  const shortAddress = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : null
+
   if (isMobile) {
     return (
       <div className="flex min-h-screen flex-col bg-background">
         {/* No Navbar or Footer in mobile mode on AppPage */}
         <main className="flex-1 py-4 container px-2 animate-fade-in text-xl">
           <div className="flex flex-col items-center gap-4">
-            <ConnectButton />
+            {!isConnected ? (
+              <Button className="neo-button" onClick={connectWallet}>
+                Connect Arena Wallet
+              </Button>
+            ) : (
+              <span className="text-sky-400 font-mono text-sm">{shortAddress}</span>
+            )}
             <div className="w-full aspect-video max-w-md">
               <iframe
                 src={`https://player.twitch.tv/?channel=londonexplorerdroid&parent=${window.location.hostname}&darkpopout`}
@@ -341,7 +352,9 @@ const AppPage = () => {
               Please connect your wallet to view the robot feed and control panel.
             </p>
             <div className="z-50 relative">
-              <ConnectButton />
+              <Button className="neo-button" onClick={connectWallet}>
+                Connect Arena Wallet
+              </Button>
             </div>
           </div>
         )}

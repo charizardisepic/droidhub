@@ -2,60 +2,54 @@
 
 import { useState, useEffect } from "react"
 import { Link, useLocation } from "react-router-dom"
-import { ConnectButton } from "@rainbow-me/rainbowkit"
+import { Button } from "@/components/ui/button"
 import { useAccount } from "wagmi"
 import { Badge } from "@/components/ui/badge"
 import { useBlockchainUtils } from "@/lib/blockchainUtils"
 
 export const Navbar = () => {
   const location = useLocation()
-  const { address, isConnected } = useAccount()
-  // Single hook call for blockchain utilities
-  const { getUserBalance, getNetwork } = useBlockchainUtils()
+  // Use Arena SDK wallet state
+  const { address, isConnected, getUserBalance, getNetwork, connectWallet } = useBlockchainUtils()
   const [network, setNetwork] = useState<'MainNet' | 'TestNet'>(getNetwork())
   const [userBalance, setUserBalance] = useState("0.0")
 
   useEffect(() => {
-    // Initialize network label via utils
     setNetwork(getNetwork())
-    const handler = (chainIdHex: string) => {
-      setNetwork(getNetwork())
-    }
-    // Listen for chain changes
-    (window as any).ethereum?.on('chainChanged', handler)
+    const handler = () => setNetwork(getNetwork())
+    // Listen for Arena SDK chain changes if available
+    const sdk = (window as any).arenaAppStoreSdk
+    sdk?.on?.('chainChanged', handler)
     return () => {
-      (window as any).ethereum?.removeListener('chainChanged', handler)
+      sdk?.off?.('chainChanged', handler)
     }
-  }, [])
+  }, [getNetwork])
 
   useEffect(() => {
     let isMounted = true
     let intervalId: NodeJS.Timeout | null = null
-
     const fetchBalance = async () => {
       if (isConnected && address) {
         try {
           const balance = await getUserBalance()
-          if (isMounted) {
-            // Round to 2 decimal places
-            setUserBalance(Number.parseFloat(balance).toFixed(2))
-          }
+          if (isMounted) setUserBalance(Number.parseFloat(balance).toFixed(2))
         } catch (error) {
           console.error("Error fetching user balance:", error)
         }
+      } else {
+        setUserBalance("0.0")
       }
     }
-
     fetchBalance()
-
-    // Poll every 5 seconds
     intervalId = setInterval(fetchBalance, 5000)
-
     return () => {
       isMounted = false
       if (intervalId) clearInterval(intervalId)
     }
   }, [isConnected, address, getUserBalance])
+
+  // Helper to shorten address
+  const shortAddress = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : null
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-md">
@@ -109,12 +103,14 @@ export const Navbar = () => {
         <div className="flex items-center gap-4">
           {isConnected && (
             <Badge variant="outline" className="border-sky-400 bg-sky-500/10 text-sky-400 text-sm px-3 py-1">
-              Balance: {userBalance} AVAX
+              {shortAddress} | Balance: {userBalance} AVAX
             </Badge>
           )}
-          <div className="scale-95">
-            <ConnectButton showBalance={false} chainStatus="icon" />
-          </div>
+          {!isConnected && (
+            <Button className="neo-button" onClick={connectWallet}>
+              Connect Arena Wallet
+            </Button>
+          )}
         </div>
       </div>
     </nav>

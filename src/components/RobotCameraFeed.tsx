@@ -2,10 +2,11 @@
 
 import { Card } from "@/components/ui/card"
 import { useAccount } from "wagmi"
-import { ConnectButton } from "@rainbow-me/rainbowkit"
 import { Users, Clock } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useSearchParams } from "react-router-dom"
+import { useBlockchainUtils } from "@/lib/blockchainUtils"
+import { Button } from "@/components/ui/button"
 
 interface RobotCameraFeedProps {
   robotId?: string
@@ -20,7 +21,7 @@ export const RobotCameraFeed = ({
   viewerCount = 5,
   chargeRate = 2.5,
 }: RobotCameraFeedProps) => {
-  const { isConnected } = useAccount()
+  const { isConnected, connectWallet } = useBlockchainUtils()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const robots = [
@@ -100,7 +101,9 @@ export const RobotCameraFeed = ({
               <div className="text-muted-foreground mb-4">
                 You need to connect your wallet to view the robot camera feed and control the robot
               </div>
-              <ConnectButton />
+              <Button className="neo-button" onClick={connectWallet}>
+                Connect Arena Wallet
+              </Button>
             </div>
           </div>
         )}

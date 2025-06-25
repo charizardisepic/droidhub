@@ -1,33 +1,15 @@
 "use client"
 
-import { useAccount } from "wagmi"
-import * as ethers from "ethers"
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 
-// RPC endpoints for Avalanche networks
-const RPC_URL_MAINNET = "https://avalanche-c-chain-rpc.publicnode.com"
-const RPC_URL_TESTNET = "https://api.avax-test.network/ext/bc/C/rpc"
 // Contract addresses for Avalanche networks
-const MAINNET_CONTRACT_ADDRESS = "0xB3f57e8fc33f61Ce464a9c287f34EF3FD422B1ae" // Deployed DroidHub mainnet contract
+const MAINNET_CONTRACT_ADDRESS = "0xB3f57e8fc33f61Ce464a9c287f34EF3FD422B1ae"
 const TESTNET_CONTRACT_ADDRESS = "0xfd275143fAbFAb2c4bE8f0d51266e8896B276b3b"
 
-// Helper to get the correct contract based on current chain
-const getContract = (signerOrProvider: any) => {
-  // Always detect chainId from MetaMask to select correct contract address
-  const chainIdHex = (window as any).ethereum?.chainId
-  const chainId = chainIdHex ? parseInt(chainIdHex, 16) : 43114
-  const contractAddress =
-    chainId === 43113 && ethers.utils.isAddress(TESTNET_CONTRACT_ADDRESS)
-      ? TESTNET_CONTRACT_ADDRESS
-      : MAINNET_CONTRACT_ADDRESS
-  return new ethers.Contract(contractAddress, ABI, signerOrProvider)
-}
-// Helper to get JSON RPC provider based on current chain
-const getReadProvider = () => {
-  const chainIdHex = (window as any).ethereum?.chainId
-  const chainId = chainIdHex ? parseInt(chainIdHex, 16) : 43114
-  const url = chainId === 43113 ? RPC_URL_TESTNET : RPC_URL_MAINNET
-  return new ethers.providers.JsonRpcProvider(url)
+// Helper to get the correct contract address based on current chain
+export const getContractAddress = (chainId: number | string | null) => {
+  if (chainId === 43113 || chainId === "43113") return TESTNET_CONTRACT_ADDRESS
+  return MAINNET_CONTRACT_ADDRESS
 }
 
 // Full ABI based on the DroidHubContract
@@ -89,18 +71,64 @@ const ABI = [
   { "inputs": [],"name": "totalStaked","outputs": [ { "internalType": "uint256","name": "","type": "uint256" } ],"stateMutability": "view","type": "function" }
 ]
 
-export const useBlockchainUtils = () => {
-  const { address, isConnected } = useAccount()
-  const [cachedLeaderboard, setCachedLeaderboard] = useState<any[]>([])
+// Arena wallet hook
+export const useArenaWallet = () => {
+  const [address, setAddress] = useState<string | null>(null)
+  const [isConnected, setIsConnected] = useState(false)
+  const [provider, setProvider] = useState<any>(null)
+  const [chainId, setChainId] = useState<string | null>(null)
 
-  // Helper to get signer for write operations
-  const getSigner = () => {
-    if (typeof window !== "undefined" && (window as any).ethereum && isConnected) {
-      const web3Provider = new ethers.providers.Web3Provider((window as any).ethereum)
-      return web3Provider.getSigner()
+  // Reown projectId for Arena SDK
+  const projectId = '60d1bdef75d2389275fcbf3d875b652a'
+
+  useEffect(() => {
+    const sdk = (window as any).arenaAppStoreSdk
+    if (!sdk) return
+    // Get initial state
+    sdk.getAccounts?.().then((accounts: string[]) => {
+      setAddress(accounts?.[0] || null)
+      setIsConnected(!!accounts?.[0])
+    })
+    setProvider(sdk.getProvider?.() || sdk.provider || null)
+    setChainId(sdk.chainId || null)
+    // Listen for account/chain changes
+    const onAccountsChanged = (accounts: string[]) => {
+      setAddress(accounts?.[0] || null)
+      setIsConnected(!!accounts?.[0])
     }
-    return null
+    const onChainChanged = (cid: string) => setChainId(cid)
+    sdk.on?.("accountsChanged", onAccountsChanged)
+    sdk.on?.("chainChanged", onChainChanged)
+    return () => {
+      sdk.off?.("accountsChanged", onAccountsChanged)
+      sdk.off?.("chainChanged", onChainChanged)
+    }
+  }, [])
+
+  // Connect wallet
+  const connectWallet = async () => {
+    const sdk = (window as any).arenaAppStoreSdk
+    if (!sdk) throw new Error('Arena SDK not loaded on window.arenaAppStoreSdk')
+    if (typeof sdk.connectWallet !== 'function') throw new Error('Arena SDK connectWallet method not available')
+    let accounts
+    try {
+      accounts = await sdk.connectWallet({ projectId })
+    } catch (err) {
+      throw new Error('Arena connectWallet error: ' + (err?.message || err))
+    }
+    if (!accounts || !accounts[0]) throw new Error('Arena wallet connect: No accounts returned')
+    setAddress(accounts[0])
+    setIsConnected(true)
+    setProvider(sdk.getProvider?.() || sdk.provider || null)
+    setChainId(sdk.chainId || null)
   }
+
+  return { address, isConnected, provider, chainId, connectWallet }
+}
+
+export const useBlockchainUtils = () => {
+  const { address, isConnected, provider, chainId, connectWallet } = useArenaWallet()
+  const [cachedLeaderboard, setCachedLeaderboard] = useState<any[]>([])
 
   // ========== STAKING OPERATIONS ==========
 
@@ -109,21 +137,12 @@ export const useBlockchainUtils = () => {
       console.error("Wallet not connected")
       return false
     }
-
     try {
-      const signer = getSigner()
-      if (!signer) throw new Error("No signer available")
-      const contract = getContract(signer)
-
-      // Set explicit gas parameters
-      const tx = await contract.stakeTokens({
-        value: ethers.utils.parseEther(amount),
-        gasLimit: 300000,
-        gasPrice: ethers.utils.parseUnits("1", "gwei"),
-      })
-
-      await tx.wait()
-      console.log("Staking transaction:", tx.hash)
+      const sdk = (window as any).arenaAppStoreSdk
+      if (!sdk) throw new Error("Arena SDK not loaded")
+      const tx = await sdk.stakeTokens?.(amount)
+      if (tx?.wait) await tx.wait()
+      console.log("Staking transaction:", tx?.hash || tx)
       return true
     } catch (error) {
       console.error("Error staking tokens:", error)
@@ -136,20 +155,12 @@ export const useBlockchainUtils = () => {
       console.error("Wallet not connected")
       return false
     }
-
     try {
-      const signer = getSigner()
-      if (!signer) throw new Error("No signer available")
-      const contract = getContract(signer)
-
-      // Set explicit gas parameters
-      const tx = await contract.withdrawTokens(ethers.utils.parseEther(amount), {
-        gasLimit: 300000,
-        gasPrice: ethers.utils.parseUnits("1", "gwei"),
-      })
-
-      await tx.wait()
-      console.log("Withdrawal transaction:", tx.hash)
+      const sdk = (window as any).arenaAppStoreSdk
+      if (!sdk) throw new Error("Arena SDK not loaded")
+      const tx = await sdk.withdrawTokens?.(amount)
+      if (tx?.wait) await tx.wait()
+      console.log("Withdrawal transaction:", tx?.hash || tx)
       return true
     } catch (error) {
       console.error("Error withdrawing tokens:", error)
@@ -157,240 +168,109 @@ export const useBlockchainUtils = () => {
     }
   }
 
-  // ========== BALANCE AND CONTROL CHECKS ==========
+  // ========== BALANCE ==========
 
   const getUserBalance = useCallback(async () => {
     if (!isConnected || !address) {
       return "0.0"
     }
-
     try {
-      const provider = getReadProvider()
-      const contract = getContract(provider)
-
-      const balanceBN = await contract.getStakedBalance(address)
-      return ethers.utils.formatEther(balanceBN)
+      const sdk = (window as any).arenaAppStoreSdk
+      if (!sdk) throw new Error("Arena SDK not loaded")
+      const balance = await sdk.getStakedBalance?.(address)
+      return balance?.toString?.() || balance || "0.0"
     } catch (error) {
       console.error("Error getting user balance:", error)
       return "0.0"
     }
   }, [isConnected, address])
 
-  // ========== LEADERBOARD ==========
-
+  // ========== LEADERBOARD ========== (SDK must provide this, else placeholder)
   const getLeaderboard = async () => {
     try {
-      const provider = getReadProvider()
-      const contract = getContract(provider)
-
-      const [addresses, amounts] = await contract.getStakingLeaderboard(5)
-
-      const leaderboard = await Promise.all(
-        addresses.map(async (addr: string, i: number) => {
-          if (addr === ethers.constants.AddressZero) {
-            return null
-          }
-
-          const amount = ethers.utils.formatEther(amounts[i])
-          const timeMinutes = Number(await contract.getTimeRemaining(addr))
-          const hours = Math.floor(timeMinutes / 60)
-          const mins = timeMinutes % 60
-
-          // Format address for display
-          const shortAddr = `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`
-
-          return {
-            address: shortAddr,
-            stake: amount,
-            timeRemaining: hours > 0 ? `${hours}h ${mins}m` : `${mins}m`,
-          }
-        }),
-      )
-
-      // Filter out null entries (zero addresses)
-      const filteredLeaderboard = leaderboard.filter((entry) => entry !== null)
-      setCachedLeaderboard(filteredLeaderboard)
-      return filteredLeaderboard
+      const sdk = (window as any).arenaAppStoreSdk
+      if (sdk?.getStakingLeaderboard) {
+        const leaderboard = await sdk.getStakingLeaderboard(5)
+        setCachedLeaderboard(leaderboard)
+        return leaderboard
+      }
+      // fallback placeholder
+      return cachedLeaderboard
     } catch (error) {
       console.error("Error fetching leaderboard:", error)
       return cachedLeaderboard
     }
   }
 
-  // ========== TOP STAKER & BALANCE ==========
-
+  // ========== TOP STAKER & BALANCE ========== (SDK must provide this, else placeholder)
   const getHighestStaker = useCallback(async () => {
     try {
-      const provider = getReadProvider()
-      const contract = getContract(provider)
-
-      return await contract.getHighestStaker()
+      const sdk = (window as any).arenaAppStoreSdk
+      if (sdk?.getHighestStaker) {
+        return await sdk.getHighestStaker()
+      }
+      return null
     } catch (error) {
       console.error("Error getting highest staker:", error)
-      return ethers.constants.AddressZero
+      return null
     }
   }, [])
 
   const getStakedBalance = useCallback(async (userAddress: string) => {
     try {
-      const provider = getReadProvider()
-      const contract = getContract(provider)
-
-      const balanceBN = await contract.getStakedBalance(userAddress)
-      return ethers.utils.formatEther(balanceBN)
+      const sdk = (window as any).arenaAppStoreSdk
+      if (sdk?.getStakedBalance) {
+        const balance = await sdk.getStakedBalance(userAddress)
+        return balance?.toString?.() || balance || "0.0"
+      }
+      return "0.0"
     } catch (error) {
       console.error("Error getting staked balance:", error)
       return "0.0"
     }
   }, [])
 
-  // ========== CONTROLLER & COMMAND ==========
+  // ========== CONNECT WALLET BUTTON ==========
+  // Use connectWallet for UI button
 
+  // ========== CONTROLLER ========== (for AppPage)
   const getCurrentController = useCallback(async () => {
     try {
-      const provider = getReadProvider()
-      const contract = getContract(provider)
-
-      return await contract.currentController()
+      const sdk = (window as any).arenaAppStoreSdk
+      if (sdk?.currentController) {
+        return await sdk.currentController()
+      }
+      if (sdk?.getCurrentController) {
+        return await sdk.getCurrentController()
+      }
+      return "0x0000000000000000000000000000000000000000"
     } catch (error) {
-      console.error("Error fetching current controller:", error)
-      return ethers.constants.AddressZero
+      console.error("Error getting current controller:", error)
+      return "0x0000000000000000000000000000000000000000"
     }
   }, [])
 
-  const sendRobotCommand = async (robotId: string, command: string) => {
-    if (!isConnected) {
-      console.error("Wallet not connected for command")
-      return false
-    }
-    try {
-      const signer = getSigner()
-      if (!signer) throw new Error("No signer for sendCommand")
-      const contract = getContract(signer)
-
-      // Set explicit gas parameters
-      const tx = await contract.sendCommand(robotId, command, {
-        gasLimit: 30000000,
-        gasPrice: ethers.utils.parseUnits("1", "gwei"),
-      })
-
-      await tx.wait()
-      console.log("Command sent:", command)
-      return true
-    } catch (error) {
-      console.error("Error sending robot command:", error)
-      return false
-    }
-  }
-
-  // ========== ROBOT STATUS ==========
-
-  const getRobotBatteryLevel = useCallback(async (robotId: string) => {
-    // Return placeholder data instead of calling the contract
-    return Math.floor(Math.random() * 30) + 70 // Random between 70-100
-  }, [])
-
-  const getRobotUptime = useCallback(async (robotId: string) => {
-    // Return placeholder data instead of calling the contract
-    return new Date().toISOString()
-  }, [])
-
-  const getRobotLocation = useCallback(async (robotId: string) => {
-    // Return placeholder data instead of calling the contract
-    return { lat: Math.floor(Math.random() * 100), lng: Math.floor(Math.random() * 100) }
-  }, [])
-
-  const getAllRobotIds = async () => {
-    try {
-      const provider = getReadProvider()
-      const contract = getContract(provider)
-
-      return await contract.getAllRobotIds()
-    } catch (error) {
-      console.error("Error getting all robot IDs:", error)
-      return []
-    }
-  }
-
-  // ========== FEE OPERATIONS ==========
-
+  // ========== BOT FEE ========== (for AppPage)
   const getBotFee = useCallback(async () => {
     try {
-      const provider = getReadProvider()
-      const contract = getContract(provider)
-
-      const fee = await contract.getBotFee()
-      return ethers.utils.formatEther(fee)
+      const sdk = (window as any).arenaAppStoreSdk
+      if (sdk?.getBotFee) {
+        const fee = await sdk.getBotFee()
+        // Convert from wei if needed (assume AVAX has 18 decimals)
+        if (typeof fee === "string" || typeof fee === "number") {
+          const val = typeof fee === "string" ? parseFloat(fee) : fee
+          // If value is very large, assume it's in wei
+          if (val > 1e10) return (val / 1e18).toString()
+          return val.toString()
+        }
+        return fee?.toString?.() || "0.0"
+      }
+      return "0.0"
     } catch (error) {
       console.error("Error getting bot fee:", error)
-      return "0.5"
+      return "0.0"
     }
   }, [])
-
-  const getMinutesSinceLastCollection = async () => {
-    try {
-      const provider = getReadProvider()
-      const contract = getContract(provider)
-
-      const minutes = await contract.getMinutesSinceLastCollection()
-      return minutes.toNumber()
-    } catch (error) {
-      console.error("Error getting minutes since last collection:", error)
-      return 0
-    }
-  }
-
-  const forceFeeCollection = async () => {
-    if (!isConnected) {
-      return false
-    }
-    try {
-      const signer = getSigner()
-      if (!signer) throw new Error("No signer available")
-      const contract = getContract(signer)
-
-      // Set explicit gas parameters
-      const tx = await contract.forceFeeCollection({
-        gasLimit: 30000000,
-        gasPrice: ethers.utils.parseUnits("1", "gwei"),
-      })
-
-      await tx.wait()
-      return true
-    } catch (error) {
-      console.error("Error forcing fee collection:", error)
-      return false
-    }
-  }
-
-  // Add network detection helper
-  const getNetwork = () => {
-    const chainIdHex = (window as any).ethereum?.chainId
-    const chainId = chainIdHex ? parseInt(chainIdHex, 16) : 43114
-    return chainId === 43113 ? 'TestNet' : 'MainNet'
-  }
-
-  // Add a function to calculate time remaining based on stake difference
-  const calculateTimeRemaining = (topStake: string, secondStake: string, ratePerMinute = 2.5) => {
-    const topStakeValue = Number.parseFloat(topStake)
-    const secondStakeValue = Number.parseFloat(secondStake)
-
-    if (isNaN(topStakeValue) || isNaN(secondStakeValue) || topStakeValue <= secondStakeValue) {
-      return { minutes: 0, seconds: 0 }
-    }
-
-    // Calculate the difference and divide by rate per minute
-    const stakeDifference = topStakeValue - secondStakeValue
-    const totalMinutes = stakeDifference / ratePerMinute
-
-    // Convert to minutes and seconds
-    const minutes = Math.floor(totalMinutes)
-    const seconds = Math.floor((totalMinutes - minutes) * 60)
-
-    return { minutes, seconds }
-  }
-
-  // ========== RETURN ALL FUNCTIONS ==========
 
   return {
     stakeTokens,
@@ -399,18 +279,31 @@ export const useBlockchainUtils = () => {
     getLeaderboard,
     getHighestStaker,
     getStakedBalance,
-    getCurrentController,
-    sendRobotCommand,
-    getRobotBatteryLevel,
-    getRobotUptime,
-    getRobotLocation,
-    getAllRobotIds,
-    getBotFee,
-    getMinutesSinceLastCollection,
-    forceFeeCollection,
-    calculateTimeRemaining,
-    getNetwork, // dynamic network label
+    connectWallet,
+    address,
+    isConnected,
+    provider,
+    chainId,
+    getNetwork, // add getNetwork to the returned object
+    getCurrentController, // add for AppPage
+    getBotFee, // add for AppPage
+    // ...add more Arena SDK methods as needed...
   }
+}
+
+// Minimal getContract export for compatibility (returns address and ABI)
+export const getContract = (providerOrSigner?: any) => {
+  const sdk = (window as any).arenaAppStoreSdk
+  const chainId = sdk?.chainId || 43114
+  const contractAddress = getContractAddress(chainId)
+  return { contractAddress, ABI, providerOrSigner }
+}
+
+// Add getNetwork export for UI compatibility
+export const getNetwork = () => {
+  const sdk = (window as any).arenaAppStoreSdk
+  const chainId = sdk?.chainId || 43114
+  return chainId == 43113 || chainId == "43113" ? "TestNet" : "MainNet"
 }
 
 export default useBlockchainUtils

@@ -1,7 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-import { useAccount } from "wagmi"
+import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -9,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useBlockchainUtils } from "@/lib/blockchainUtils"
 import { toast } from "@/components/ui/sonner"
 import { ethers } from "ethers"
+import { getContract } from "@/lib/blockchainUtils"
 
 interface StakeDashboardProps {
   onUserBalanceChange?: (balance: string) => void
@@ -16,7 +16,6 @@ interface StakeDashboardProps {
 }
 
 export const StakeDashboard = ({ onUserBalanceChange, onTopStakeChange }: StakeDashboardProps) => {
-  const { address, isConnected } = useAccount()
   // Dialog open state
   const [isStakeDialogOpen, setIsStakeDialogOpen] = useState(false)
   const [isWithdrawDialogOpen, setIsWithdrawDialogOpen] = useState(false)
@@ -26,11 +25,106 @@ export const StakeDashboard = ({ onUserBalanceChange, onTopStakeChange }: StakeD
   const [stakeAmount, setStakeAmount] = useState("")
   const [withdrawAmount, setWithdrawAmount] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [arenaWalletAddress, setArenaWalletAddress] = useState<string | null>(null)
+
+  // Listen for wallet changes from Arena SDK
+  useEffect(() => {
+    if (window.arenaAppStoreSdk) {
+      window.arenaAppStoreSdk.on('walletChanged', ({ address }) => {
+        setArenaWalletAddress(address)
+      })
+    }
+  }, [])
+
+  // Replace address and isConnected with Arena wallet
+  const address = arenaWalletAddress
+  const isConnected = !!arenaWalletAddress
+
+  // Fetch AVAX balance using Arena SDK
+  const fetchArenaBalance = async () => {
+    if (!window.arenaAppStoreSdk?.provider || !arenaWalletAddress) return "0.0"
+    try {
+      const balanceHex = await window.arenaAppStoreSdk.provider.request({
+        method: 'eth_getBalance',
+        params: [arenaWalletAddress, 'latest']
+      })
+      return (Number.parseFloat(parseInt(balanceHex, 16) / 1e18 + "")).toFixed(2)
+    } catch (e) {
+      return "0.0"
+    }
+  }
+
+  // Update user balance using Arena SDK
+  useEffect(() => {
+    let isMounted = true
+    const updateBalance = async () => {
+      if (!isConnected) return
+      setUserBalance("Loading...")
+      const bal = await fetchArenaBalance()
+      if (isMounted) setUserBalance(bal)
+    }
+    updateBalance()
+    return () => { isMounted = false }
+  }, [arenaWalletAddress])
 
   // Use a ref to track if data has been fetched
   const dataFetched = useRef(false)
 
-  const { getUserBalance, getHighestStaker, getStakedBalance, stakeTokens, withdrawTokens, getNetwork } = useBlockchainUtils()
+  const { getHighestStaker, getStakedBalance, getNetwork } = useBlockchainUtils()
+
+  // Helper to get Arena provider signer
+  const getArenaSigner = () => {
+    if (window.arenaAppStoreSdk?.provider && address) {
+      return new ethers.providers.Web3Provider(window.arenaAppStoreSdk.provider).getSigner(address)
+    }
+    return null
+  }
+
+  // ========== STAKING OPERATIONS (Arena SDK) ==========
+  const stakeTokens = async (amount: string) => {
+    if (!isConnected) {
+      toast("Wallet not connected")
+      return false
+    }
+    try {
+      const signer = getArenaSigner()
+      if (!signer) throw new Error("No signer available")
+      const contract = getContract(signer)
+      const tx = await contract.stakeTokens({
+        value: ethers.utils.parseEther(amount),
+        gasLimit: 300000,
+        gasPrice: ethers.utils.parseUnits("1", "gwei"),
+      })
+      await tx.wait()
+      console.log("Staking transaction:", tx.hash)
+      return true
+    } catch (error) {
+      console.error("Error staking tokens:", error)
+      return false
+    }
+  }
+
+  const withdrawTokens = async (amount: string) => {
+    if (!isConnected) {
+      toast("Wallet not connected")
+      return false
+    }
+    try {
+      const signer = getArenaSigner()
+      if (!signer) throw new Error("No signer available")
+      const contract = getContract(signer)
+      const tx = await contract.withdrawTokens(ethers.utils.parseEther(amount), {
+        gasLimit: 300000,
+        gasPrice: ethers.utils.parseUnits("1", "gwei"),
+      })
+      await tx.wait()
+      console.log("Withdrawal transaction:", tx.hash)
+      return true
+    } catch (error) {
+      console.error("Error withdrawing tokens:", error)
+      return false
+    }
+  }
 
   // Update to poll every 5 seconds and replace DOT with AVAX
   useEffect(() => {
@@ -49,7 +143,7 @@ export const StakeDashboard = ({ onUserBalanceChange, onTopStakeChange }: StakeD
         }
 
         // Get user's staked balance
-        const balance = await getUserBalance()
+        const balance = await fetchArenaBalance()
         if (isMounted) {
           // Round to 2 decimal places
           setUserBalance(Number.parseFloat(balance).toFixed(2))
@@ -94,7 +188,7 @@ export const StakeDashboard = ({ onUserBalanceChange, onTopStakeChange }: StakeD
       isMounted = false
       if (intervalId) clearInterval(intervalId)
     }
-  }, [isConnected, address, getUserBalance, getHighestStaker, getStakedBalance])
+  }, [isConnected, address, getHighestStaker, getStakedBalance])
 
   // Callbacks for parent component
   useEffect(() => {
