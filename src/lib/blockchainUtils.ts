@@ -325,4 +325,24 @@ export const getNetwork = () => {
   return chainId == 43113 || chainId == "43113" ? "TestNet" : "MainNet"
 }
 
+// DEBUG: Manual Arena connect handler for troubleshooting
+export function useArenaConnectDebug() {
+  return async function arenaConnectDebug() {
+    if (!(window as any).arenaAppStoreSdk) {
+      alert('Arena SDK not loaded!');
+      return;
+    }
+    if (typeof (window as any).arenaAppStoreSdk.connectWallet !== 'function') {
+      alert('Arena SDK connectWallet not available!');
+      return;
+    }
+    try {
+      const accounts = await (window as any).arenaAppStoreSdk.connectWallet({ projectId: '60d1bdef75d2389275fcbf3d875b652a' });
+      alert('Connected accounts: ' + JSON.stringify(accounts));
+    } catch (e) {
+      alert('Error connecting wallet: ' + (e?.message || e));
+    }
+  }
+}
+
 export default useBlockchainUtils

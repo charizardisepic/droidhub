@@ -24,6 +24,10 @@
         window.arenaAppStoreSdk = new window.ArenaAppStoreSdk({
           projectId: '60d1bdef75d2389275fcbf3d875b652a'
         });
+        // Explicitly initialize the SDK if an init() method exists
+        if (typeof window.arenaAppStoreSdk.init === 'function') {
+          window.arenaAppStoreSdk.init();
+        }
         console.log('ArenaAppStoreSdk loaded:', window.ArenaAppStoreSdk);
       } else {
         console.error('ArenaAppStoreSdk is NOT available on window!');

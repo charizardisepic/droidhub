@@ -5,12 +5,13 @@ import { Link, useLocation } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { useAccount } from "wagmi"
 import { Badge } from "@/components/ui/badge"
-import { useBlockchainUtils } from "@/lib/blockchainUtils"
+import { useBlockchainUtils, useArenaConnectDebug } from "@/lib/blockchainUtils"
 
 export const Navbar = () => {
   const location = useLocation()
   // Use Arena SDK wallet state
   const { address, isConnected, getUserBalance, getNetwork, connectWallet } = useBlockchainUtils()
+  const arenaConnectDebug = useArenaConnectDebug();
   const [network, setNetwork] = useState<'MainNet' | 'TestNet'>(getNetwork())
   const [userBalance, setUserBalance] = useState("0.0")
 
@@ -107,9 +108,14 @@ export const Navbar = () => {
             </Badge>
           )}
           {!isConnected && (
-            <Button className="neo-button" onClick={connectWallet}>
-              Connect Arena Wallet
-            </Button>
+            <>
+              <Button className="neo-button" onClick={connectWallet}>
+                Connect Arena Wallet
+              </Button>
+              <Button className="neo-button" onClick={arenaConnectDebug}>
+                Debug Arena Connect
+              </Button>
+            </>
           )}
         </div>
       </div>
