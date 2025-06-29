@@ -9,16 +9,14 @@ import { useBlockchainUtils, useArenaConnectDebug } from "@/lib/blockchainUtils"
 
 export const Navbar = () => {
   const location = useLocation()
-  // Use Arena SDK wallet state
   const { address, isConnected, getUserBalance, getNetwork, connectWallet } = useBlockchainUtils()
-  const arenaConnectDebug = useArenaConnectDebug();
   const [network, setNetwork] = useState<'MainNet' | 'TestNet'>(getNetwork())
   const [userBalance, setUserBalance] = useState("0.0")
+  const arenaConnectDebug = useArenaConnectDebug();
 
   useEffect(() => {
     setNetwork(getNetwork())
     const handler = () => setNetwork(getNetwork())
-    // Listen for Arena SDK chain changes if available
     const sdk = (window as any).arenaAppStoreSdk
     sdk?.on?.('chainChanged', handler)
     return () => {
@@ -49,40 +47,28 @@ export const Navbar = () => {
     }
   }, [isConnected, address, getUserBalance])
 
-  // Helper to shorten address
   const shortAddress = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : null
 
   const handleConnectWallet = async () => {
-    await arenaConnectDebug(); // Run debug in console
-    await connectWallet(); // Then run the normal connect
-  };
+    // Run debug logic in console
+    if (arenaConnectDebug) await arenaConnectDebug();
+    // Then run the normal connect
+    if (connectWallet) await connectWallet();
+  }
 
   return (
-    <nav className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-md">
-      <div className="container flex h-16 items-center justify-between">
+    <nav className="w-full border-b border-border bg-background/80 backdrop-blur-lg z-50 sticky top-0">
+      <div className="container flex items-center justify-between h-16 px-4 md:px-6">
         <div className="flex items-center gap-6">
-          <Link to="/" className="flex items-center gap-2">
-            <span className="font-bold text-2xl bg-gradient-to-r from-sky-500 to-sky-400 bg-clip-text text-transparent">
-              DroidHub
-            </span>
-            <span className="text-xs px-2 py-1 rounded-full bg-sky-500/20 text-sky-400">
-              {network}
-            </span>
-          </Link>
-          <div className="hidden md:flex items-center gap-6">
-            <Link
-              to="/"
-              className={`transition-colors hover:text-sky-400 ${
-                location.pathname === "/" ? "text-sky-400 font-semibold" : "text-foreground/80"
-              }`}
-            >
-              Home
-            </Link>
+          <Link to="/" className="font-bold text-lg tracking-tight text-sky-400">DroidHub</Link>
+          <div className="flex gap-4 items-center">
             <Link
               to="/app"
-              className={`transition-colors hover:text-sky-400 ${
-                location.pathname === "/app" ? "text-sky-400 font-semibold" : "text-foreground/80"
-              }`}
+              className={
+                location.pathname === "/app"
+                  ? "text-sky-400 font-semibold"
+                  : "text-foreground/80 hover:text-sky-400 transition-colors"
+              }
             >
               App
             </Link>
