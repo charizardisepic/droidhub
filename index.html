@@ -24,9 +24,12 @@
         window.arenaAppStoreSdk = new window.ArenaAppStoreSdk({
           projectId: '60d1bdef75d2389275fcbf3d875b652a'
         });
-        // Explicitly initialize the SDK if an init() method exists
-        if (typeof window.arenaAppStoreSdk.init === 'function') {
+        // Only call init() if not already initialized
+        if (typeof window.arenaAppStoreSdk.init === 'function' && !window.arenaAppStoreSdk.walletConnectInitialized) {
           window.arenaAppStoreSdk.init();
+          console.log('ArenaAppStoreSdk: init() called');
+        } else {
+          console.log('ArenaAppStoreSdk: init() skipped (already initialized)');
         }
         console.log('ArenaAppStoreSdk loaded:', window.ArenaAppStoreSdk);
       } else {
