@@ -52,6 +52,11 @@ export const Navbar = () => {
   // Helper to shorten address
   const shortAddress = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : null
 
+  const handleConnectWallet = async () => {
+    await arenaConnectDebug(); // Run debug in console
+    await connectWallet(); // Then run the normal connect
+  };
+
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-md">
       <div className="container flex h-16 items-center justify-between">
@@ -108,14 +113,9 @@ export const Navbar = () => {
             </Badge>
           )}
           {!isConnected && (
-            <>
-              <Button className="neo-button" onClick={connectWallet}>
-                Connect Arena Wallet
-              </Button>
-              <Button className="neo-button" onClick={arenaConnectDebug}>
-                Debug Arena Connect
-              </Button>
-            </>
+            <Button className="neo-button" onClick={handleConnectWallet}>
+              Connect Arena Wallet
+            </Button>
           )}
         </div>
       </div>
