@@ -338,6 +338,16 @@ export function useArenaConnectDebug() {
       return;
     }
     try {
+      // Reset WalletConnect state if possible to avoid stale sessions
+      if (typeof sdk.disconnect === 'function') {
+        await sdk.disconnect();
+        console.log('Arena SDK debug: called disconnect() to reset state.');
+      }
+      if (sdk.walletConnectInitialized) {
+        sdk.walletConnectInitialized = false;
+        console.log('Arena SDK debug: forcibly reset walletConnectInitialized flag.');
+      }
+      // Now try to connect
       console.log('Arena SDK debug: calling connectWallet...');
       const accounts = await sdk.connectWallet({ projectId: '60d1bdef75d2389275fcbf3d875b652a' });
       console.log('Arena SDK debug: connected accounts:', accounts);
