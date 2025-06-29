@@ -77,36 +77,55 @@ export const useArenaWallet = () => {
   const [isConnected, setIsConnected] = useState(false)
   const [provider, setProvider] = useState<any>(null)
   const [chainId, setChainId] = useState<string | null>(null)
+  const [arenaLoaded, setArenaLoaded] = useState(false)
 
   // Reown projectId for Arena SDK
   const projectId = '60d1bdef75d2389275fcbf3d875b652a'
 
   useEffect(() => {
-    const sdk = (window as any).arenaAppStoreSdk
-    if (!sdk) return
-    // Get initial state
-    sdk.getAccounts?.().then((accounts: string[]) => {
-      setAddress(accounts?.[0] || null)
-      setIsConnected(!!accounts?.[0])
-    })
-    setProvider(sdk.getProvider?.() || sdk.provider || null)
-    setChainId(sdk.chainId || null)
-    // Listen for account/chain changes
-    const onAccountsChanged = (accounts: string[]) => {
-      setAddress(accounts?.[0] || null)
-      setIsConnected(!!accounts?.[0])
+    let interval: any;
+    function checkAndInit() {
+      const sdk = (window as any).arenaAppStoreSdk;
+      if (!sdk) return;
+      setArenaLoaded(true);
+      // Get initial state
+      sdk.getAccounts?.().then((accounts: string[]) => {
+        setAddress(accounts?.[0] || null)
+        setIsConnected(!!accounts?.[0])
+      })
+      setProvider(sdk.getProvider?.() || sdk.provider || null)
+      setChainId(sdk.chainId || null)
+      // Listen for account/chain changes
+      const onAccountsChanged = (accounts: string[]) => {
+        setAddress(accounts?.[0] || null)
+        setIsConnected(!!accounts?.[0])
+      }
+      const onChainChanged = (cid: string) => setChainId(cid)
+      sdk.on?.("accountsChanged", onAccountsChanged)
+      sdk.on?.("chainChanged", onChainChanged)
+      return () => {
+        sdk.off?.("accountsChanged", onAccountsChanged)
+        sdk.off?.("chainChanged", onChainChanged)
+      }
     }
-    const onChainChanged = (cid: string) => setChainId(cid)
-    sdk.on?.("accountsChanged", onAccountsChanged)
-    sdk.on?.("chainChanged", onChainChanged)
-    return () => {
-      sdk.off?.("accountsChanged", onAccountsChanged)
-      sdk.off?.("chainChanged", onChainChanged)
+    if (!(window as any).arenaAppStoreSdk) {
+      interval = setInterval(checkAndInit, 100)
+      return () => clearInterval(interval)
+    } else {
+      return checkAndInit();
     }
   }, [])
 
   // Connect wallet
   const connectWallet = async () => {
+    // Wait for Arena SDK to be loaded
+    if (!arenaLoaded) {
+      // Wait up to 2 seconds for SDK to load
+      for (let i = 0; i < 20; i++) {
+        if ((window as any).arenaAppStoreSdk) break;
+        await new Promise(res => setTimeout(res, 100));
+      }
+    }
     const sdk = (window as any).arenaAppStoreSdk
     if (!sdk) throw new Error('Arena SDK not loaded on window.arenaAppStoreSdk')
     if (typeof sdk.connectWallet !== 'function') throw new Error('Arena SDK connectWallet method not available')
@@ -123,7 +142,7 @@ export const useArenaWallet = () => {
     setChainId(sdk.chainId || null)
   }
 
-  return { address, isConnected, provider, chainId, connectWallet }
+  return { address, isConnected, provider, chainId, connectWallet, arenaLoaded }
 }
 
 export const useBlockchainUtils = () => {

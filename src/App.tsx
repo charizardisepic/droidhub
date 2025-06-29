@@ -5,6 +5,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { RainbowKitProvider } from "@/components/RainbowKitProvider";
 import { useEffect } from "react";
+import { AppKitProvider } from "./AppKitProvider";
 
 import Index from "./pages/Index";
 import AppPage from "./pages/AppPage";
@@ -27,22 +28,24 @@ const App = () => {
   }, []);
 
   return (
-    <ThemeProvider defaultTheme="dark">
-      <RainbowKitProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/app" element={<AppPage />} />
-              <Route path="/docs" element={<Docs />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        </TooltipProvider>
-      </RainbowKitProvider>
-    </ThemeProvider>
+    <AppKitProvider>
+      <ThemeProvider defaultTheme="dark">
+        <RainbowKitProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/app" element={<AppPage />} />
+                <Route path="/docs" element={<Docs />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </TooltipProvider>
+        </RainbowKitProvider>
+      </ThemeProvider>
+    </AppKitProvider>
   );
 };
 

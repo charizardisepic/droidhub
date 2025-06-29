@@ -17,7 +17,19 @@
     <div id="root"></div>
     <!-- IMPORTANT: DO NOT REMOVE THIS SCRIPT TAG OR THIS VERY COMMENT! -->
     <script src="https://cdn.gpteng.co/gptengineer.js" type="module"></script>
-    <script type="module" src="/arena-sdk/index.js"></script>
+    <!-- Arena SDK: set up global instance for React code -->
+    <script src="/arena-sdk/arena-umd.js"></script>
+    <script>
+      if (window.ArenaAppStoreSdk) {
+        window.arenaAppStoreSdk = new window.ArenaAppStoreSdk({
+          projectId: '60d1bdef75d2389275fcbf3d875b652a'
+        });
+        console.log('ArenaAppStoreSdk loaded:', window.ArenaAppStoreSdk);
+      } else {
+        console.error('ArenaAppStoreSdk is NOT available on window!');
+      }
+    </script>
+    <!-- Only reference /arena-sdk/arena-umd.js in HTML, never import in React/TS code -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
