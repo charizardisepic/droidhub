@@ -328,19 +328,21 @@ export const getNetwork = () => {
 // DEBUG: Manual Arena connect handler for troubleshooting
 export function useArenaConnectDebug() {
   return async function arenaConnectDebug() {
-    if (!(window as any).arenaAppStoreSdk) {
-      alert('Arena SDK not loaded!');
+    const sdk = (window as any).arenaAppStoreSdk;
+    if (!sdk) {
+      console.error('Arena SDK not loaded!');
       return;
     }
-    if (typeof (window as any).arenaAppStoreSdk.connectWallet !== 'function') {
-      alert('Arena SDK connectWallet not available!');
+    if (typeof sdk.connectWallet !== 'function') {
+      console.error('Arena SDK connectWallet not available!');
       return;
     }
     try {
-      const accounts = await (window as any).arenaAppStoreSdk.connectWallet({ projectId: '60d1bdef75d2389275fcbf3d875b652a' });
-      alert('Connected accounts: ' + JSON.stringify(accounts));
+      console.log('Arena SDK debug: calling connectWallet...');
+      const accounts = await sdk.connectWallet({ projectId: '60d1bdef75d2389275fcbf3d875b652a' });
+      console.log('Arena SDK debug: connected accounts:', accounts);
     } catch (e) {
-      alert('Error connecting wallet: ' + (e?.message || e));
+      console.error('Arena SDK debug: error connecting wallet:', e);
     }
   }
 }
